@@ -360,8 +360,6 @@ def test(args, weight_d, trellis1, trellis2, interleaver, device, only_tt = Fals
 
     num_batches = args.test_size // args.test_batch_size
     noise_type = args.noise_type
-    if args.noise_type in ['EPA', 'EVA', 'ETU', 'MIMO']:
-
 
     bers_ml = []
     blers_ml = []
@@ -381,7 +379,7 @@ def test(args, weight_d, trellis1, trellis2, interleaver, device, only_tt = Fals
         msgs, codewords, rx_llrs = eng.generate_lte_data('Turbo', args.block_len, (args.block_len*3)+4*(trellis1.total_memory), args.noise_type, snr_range, 179, num_batches)
         #assuming above arrays in numpy
         eng.quit()
-    elif args.noise_type == 'MIMO'
+    elif args.noise_type == 'MIMO':
         import matlab.engine
         eng = matlab.engine.start_matlab()
         s = eng.genpath('matlab_scripts')
