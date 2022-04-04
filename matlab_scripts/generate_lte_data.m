@@ -1,20 +1,12 @@
-function [msg_data, enc_data, llr_data] = generate_lte_data(coding_scheme, msg_len, code_len, chan, SNRs, num_blocks, num_sym)
+function llr_data = generate_lte_data(enc_data, code_len, chan, SNRs, num_blocks, num_sym)
 
-% load default code params
-if (coding_scheme == "BCH")
-    load('G_BCH_63_36.mat','G');
-    G = double(G);
-else
-    trellis = poly2trellis( 4, [ 13, 15 ], 13 );
-    intrlvrIndices = [0, 13,  6, 19, 12, 25, 18, 31, 24, 37, 30,  3, 36,  9,...
-                        2, 15,  8, 21, 14, 27, 20, 33, 26, 39, 32,  5, 38, 11,  4, 17,...
-                        10, 23, 16, 29, 22, 35, 28,  1, 34,  7] + 1;
-    turboenc = comm.TurboEncoder(trellis,intrlvrIndices);
-end
+% flip for python
+enc_data = transpose(enc_data);
 
-msg_data = randi([0 1],msg_len,num_sym*num_blocks,length(SNRs));
-enc_data = zeros(code_len,num_sym*num_blocks,length(SNRs));
 rx_data = zeros(code_len,num_sym*num_blocks,length(SNRs));
+temp = repmat(enc_data,1,1,length(SNRs));
+enc_data = zeros(code_len,num_sym*num_blocks,length(SNRs));
+enc_data(:,1:size(temp,2),:) = temp;
 
 for i_SNR = 1:length(SNRs)
     cur_SNR = SNRs(i_SNR);
@@ -23,17 +15,7 @@ for i_SNR = 1:length(SNRs)
         start_ind = (i_sym - 1)*num_blocks + 1;
         end_ind = i_sym*num_blocks;
         
-        msg = squeeze(msg_data(:,start_ind:end_ind, i_SNR));
-        enc = zeros(code_len,num_blocks); %179 by default
-        % encode the msg data
-        if (coding_scheme == "BCH")
-            enc = mod(G*msg,2);
-        else
-            for i = 1:num_blocks
-                enc(:,i) = turboenc(msg_data(:,i,i_SNR));
-            end
-        end
-        enc_data(:,start_ind:end_ind, i_SNR) = enc;
+        enc = enc_data(:,start_ind:end_ind, i_SNR);
         inputBits = [enc(:);randi([0 1],26028 - num_blocks*code_len,1)]; %padding
         rx_val = lte_channel(inputBits, cur_SNR, chan);
         rx_val = rx_val(1:num_blocks*code_len); % remove padding
@@ -44,8 +26,8 @@ end
 
 % demod using matlab bpsk demod
 bpskDemod = comm.BPSKDemodulator('DecisionMethod','Log-likelihood ratio');
-llr_data = reshape(bpskDemod(rx_data(:)),size(rx_data));
-
+llr_data = -1*reshape(bpskDemod(rx_data(:)),size(rx_data)); % flip the sign for consistency with tinyturbo modulation
+llr_data = llr_data(:,1:size(temp,2),:);
 end
 
 
