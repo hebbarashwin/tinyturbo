@@ -369,15 +369,23 @@ def test(args, weight_d, trellis1, trellis2, interleaver, device, only_tt = Fals
     blers_tt = []
     print("TESTING")
 
-    if args.noise_type in ['EPA', 'EVA', 'ETU']: #run from MATLAB
+    if  args.noise_type in ['EPA', 'EVA', 'ETU']: #run from MATLAB
+        print("Using ", args.noise_type, " channel")
         import matlab.engine
         eng = matlab.engine.start_matlab()
         s = eng.genpath('matlab_scripts')
         eng.addpath(s, nargout=0)
-        #[msg_data, enc_data, llr_data] = generate_lte_data(coding_scheme, msg_len, code_len, chan, SNRs, num_blocks, num_sym);
-        # can't we make num blocks 10000?
-        msgs, codewords, rx_llrs = eng.generate_lte_data('Turbo', args.block_len, (args.block_len*3)+4*(trellis1.total_memory), args.noise_type, snr_range, 179, num_batches)
-        #assuming above arrays in numpy
+        message_bits = torch.randint(0, 2, (args.test_batch_size, args.block_len), dtype=torch.float).to(device)
+        coded = turbo_encode(message_bits, trellis1, trellis2, interleaver, puncture = args.puncture).to(device)
+        coded_mat = matlab.double(coded.numpy().tolist())
+        # calculate closest multiple to num_sym(179)
+        num_sym = int(np.floor(coded.size(0)/179)) + 1
+        code_len = int((args.block_len*3)+4*(trellis1.total_memory))
+        num_blocks = 179
+        SNRs = matlab.double(snr_range)
+        rx_llrs = eng.generate_lte_data(coded_mat, code_len, args.noise_type, SNRs, num_blocks, num_sym)
+        # convert to numpy
+        rx_llrs = np.array(rx_llrs)
         eng.quit()
     elif args.noise_type == 'MIMO':
         import matlab.engine
@@ -403,8 +411,8 @@ def test(args, weight_d, trellis1, trellis2, interleaver, device, only_tt = Fals
                 received_llrs = 2*noisy_coded/noise_variance
 
             elif noise_type in ['EPA', 'EVA', 'ETU', 'MIMO']:
-                message_bits = torch.from_numpy(msgs[:, ii, k]).to(device)
-                received_llrs = torch.from_numpy(rx_llrs[:, ii, k]).to(device)
+                # converting numpy to torch here
+                received_llrs = torch.from_numpy(np.transpose(rx_llrs[:, :, k])).to(device)
 
             if not only_tt:
                 # Turbo decode
