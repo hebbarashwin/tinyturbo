@@ -39,6 +39,8 @@ def get_args():
     parser.add_argument('--snr_points', type=int, default=8)
     parser.add_argument('--test_snr_start', type=float, default=-8)
     parser.add_argument('--test_snr_end', type=float, default=0)
+    parser.add_argument('--test_snr_start', type=float, default=1)
+    parser.add_argument('--test_snr_end', type=float, default=8)
     parser.add_argument('--test_block_len', type=int, default=None)
 
     parser.add_argument('--noise_type', type=str, choices=['awgn', 'fading', 'radar', 't-dist', 'EPA', 'EVA', 'ETU', 'MIMO'], default='awgn')
@@ -178,7 +180,6 @@ if __name__ == '__main__':
         rx_llrs =  eng.generate_mimo_diversity_data (num_tx, num_rx, max_num_tx, max_num_rx, coded_mat, code_len, SNRs, num_codewords)
         # convert to numpy
         rx_llrs = np.array(rx_llrs)
-        eng.quit()
 
     for ii in range(num_batches):
         for k, snr in enumerate(snr_range):
