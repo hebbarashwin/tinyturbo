@@ -1,4 +1,4 @@
-function [msg_data, enc_data, llr_data] = generate_mimo_diversity_data (num_tx, num_rx, max_num_tx, max_num_rx, msg_len, code_len, EbNo, num_packets)
+function llr_data = generate_mimo_diversity_data (num_tx, num_rx, max_num_tx, max_num_rx, enc_data, code_len, EbNo, num_packets)
   
     % Create comm.BPSKModulator and comm.BPSKDemodulator System objects(TM)
     bpskMod = comm.BPSKModulator;
@@ -28,16 +28,10 @@ function [msg_data, enc_data, llr_data] = generate_mimo_diversity_data (num_tx, 
     
     % Pre-allocate variables for speed
     H = zeros(code_len, max_num_tx, max_num_rx);
-    
-    % Configure Turbo Enc/Dec
-    trellis = poly2trellis( 4, [ 13, 15 ], 13 );
-    intrlvrIndices =[0, 13,  6, 19, 12, 25, 18, 31, 24, 37, 30,  3, 36,  9,...
-        2, 15,  8, 21, 14, 27, 20, 33, 26, 39, 32,  5, 38, 11,  4, 17,...
-        10, 23, 16, 29, 22, 35, 28,  1, 34,  7] + 1;
-    turboenc = comm.TurboEncoder(trellis,intrlvrIndices);
-  
-    msg_data = zeros(msg_len,num_packets,length(EbNo));
-    enc_data = zeros(code_len,num_packets,length(EbNo));
+
+    % flip for python
+    enc_data = transpose(enc_data);
+    enc_data = repmat(enc_data,1,1,length(EbNo));
     llr_data = zeros(code_len,num_packets,length(EbNo));
 
     % Loop over several EbNo points
@@ -48,13 +42,7 @@ function [msg_data, enc_data, llr_data] = generate_mimo_diversity_data (num_tx, 
 
         % Loop over the number of packets
         for packetIdx = 1:num_packets
-            % Generate data vector per frame
-            msg = randi([0 1], msg_len,1);
-            msg_data(:,packetIdx,idx) = msg;
-
-            % Encode using Turbo
-            enc = turboenc(msg);
-            enc_data(:,packetIdx,idx) = enc;
+            enc = enc_data(:,packetIdx,idx);
 
             % Modulate data
             modData = bpskMod(enc);
@@ -98,7 +86,7 @@ function [msg_data, enc_data, llr_data] = generate_mimo_diversity_data (num_tx, 
             end
             
             % store for block processing
-            llr_data(:,packetIdx,idx) = llr;
+            llr_data(:,packetIdx,idx) = -1*llr; % flip the sign for consistency with tinyturbo modulation
     
         end
      

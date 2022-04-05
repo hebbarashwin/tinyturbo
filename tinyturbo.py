@@ -369,49 +369,50 @@ def test(args, weight_d, trellis1, trellis2, interleaver, device, only_tt = Fals
     blers_tt = []
     print("TESTING")
 
-    if  args.noise_type in ['EPA', 'EVA', 'ETU']: #run from MATLAB
-        print("Using ", args.noise_type, " channel")
-        import matlab.engine
-        eng = matlab.engine.start_matlab()
-        s = eng.genpath('matlab_scripts')
-        eng.addpath(s, nargout=0)
-        message_bits = torch.randint(0, 2, (args.test_batch_size, args.block_len), dtype=torch.float).to(device)
-        coded = turbo_encode(message_bits, trellis1, trellis2, interleaver, puncture = args.puncture).to(device)
-        coded_mat = matlab.double(coded.numpy().tolist())
-        # calculate closest multiple to num_sym(179)
-        num_sym = int(np.floor(coded.size(0)/179)) + 1
-        code_len = int((args.block_len*3)+4*(trellis1.total_memory))
-        num_blocks = 179
-        SNRs = matlab.double(snr_range)
-        rx_llrs = eng.generate_lte_data(coded_mat, code_len, args.noise_type, SNRs, num_blocks, num_sym)
-        # convert to numpy
-        rx_llrs = np.array(rx_llrs)
-        eng.quit()
-    elif args.noise_type == 'MIMO':
-        print("Using ", args.noise_type, " channel")
-        import matlab.engine
-        eng = matlab.engine.start_matlab()
-        s = eng.genpath('matlab_scripts')
-        eng.addpath(s, nargout=0)
-        message_bits = torch.randint(0, 2, (args.test_batch_size, args.block_len), dtype=torch.float).to(device)
-        coded = turbo_encode(message_bits, trellis1, trellis2, interleaver, puncture = args.puncture).to(device)
-        coded_mat = matlab.double(coded.numpy().tolist())
-        code_len = int((args.block_len*3)+4*(trellis1.total_memory))
-        num_blocks = 179
-        SNRs = matlab.double(snr_range)
-        num_tx = 1
-        num_rx = 2
-        max_num_tx = 2
-        max_num_rx = 2
-        num_codewords = int(args.test_size)
-        rx_llrs =  eng.generate_mimo_diversity_data (num_tx, num_rx, max_num_tx, max_num_rx, coded_mat, code_len, SNRs, num_codewords)
-        # convert to numpy
-        rx_llrs = np.array(rx_llrs)
-        eng.quit()
-
     for ii in range(num_batches):
-        message_bits = torch.randint(0, 2, (args.test_batch_size, args.block_len), dtype=torch.float).to(device)
-        coded = turbo_encode(message_bits, trellis1, trellis2, interleaver, puncture = args.puncture).to(device)
+        if args.noise_type in ['awgn', 'fading', 't-dist', 'radar']:
+            message_bits = torch.randint(0, 2, (args.test_batch_size, args.block_len), dtype=torch.float).to(device)
+            coded = turbo_encode(message_bits, trellis1, trellis2, interleaver, puncture = args.puncture).to(device)
+        else:
+            if  args.noise_type in ['EPA', 'EVA', 'ETU']: #run from MATLAB
+                print("Using ", args.noise_type, " channel")
+                import matlab.engine
+                eng = matlab.engine.start_matlab()
+                s = eng.genpath('matlab_scripts')
+                eng.addpath(s, nargout=0)
+                message_bits = torch.randint(0, 2, (args.test_batch_size, args.block_len), dtype=torch.float).to(device)
+                coded = turbo_encode(message_bits, trellis1, trellis2, interleaver, puncture = args.puncture).to(device)
+                coded_mat = matlab.double(coded.numpy().tolist())
+                # calculate closest multiple to num_sym(179)
+                num_sym = int(np.floor(coded.size(0)/179)) + 1
+                code_len = int((args.block_len*3)+4*(trellis1.total_memory))
+                num_blocks = 179
+                SNRs = matlab.double(snr_range)
+                rx_llrs = eng.generate_lte_data(coded_mat, code_len, args.noise_type, SNRs, num_blocks, num_sym)
+                # convert to numpy
+                rx_llrs = np.array(rx_llrs)
+                eng.quit()
+            elif args.noise_type == 'MIMO':
+                print("Using ", args.noise_type, " channel")
+                import matlab.engine
+                eng = matlab.engine.start_matlab()
+                s = eng.genpath('matlab_scripts')
+                eng.addpath(s, nargout=0)
+                message_bits = torch.randint(0, 2, (args.test_batch_size, args.block_len), dtype=torch.float).to(device)
+                coded = turbo_encode(message_bits, trellis1, trellis2, interleaver, puncture = args.puncture).to(device)
+                coded_mat = matlab.double(coded.numpy().tolist())
+                code_len = int((args.block_len*3)+4*(trellis1.total_memory))
+                num_blocks = 179
+                SNRs = matlab.double(snr_range)
+                num_tx = 1
+                num_rx = 2
+                max_num_tx = 2
+                max_num_rx = 2
+                num_codewords = int(args.test_size)
+                rx_llrs =  eng.generate_mimo_diversity_data (num_tx, num_rx, max_num_tx, max_num_rx, coded_mat, code_len, SNRs, num_codewords)
+                # convert to numpy
+                rx_llrs = np.array(rx_llrs)
+                eng.quit()
         for k, snr in tqdm(enumerate(snr_range)):
             sigma = snr_db2sigma(snr)
             noise_variance = sigma**2
