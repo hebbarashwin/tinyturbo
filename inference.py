@@ -37,8 +37,8 @@ def get_args():
     parser.add_argument('--test_size', type=int, default=100000)
     parser.add_argument('--test_batch_size', type=int, default=100000)
     parser.add_argument('--snr_points', type=int, default=8)
-    parser.add_argument('--test_snr_start', type=float, default=1)
-    parser.add_argument('--test_snr_end', type=float, default=8)
+    parser.add_argument('--test_snr_start', type=float, default=-8)
+    parser.add_argument('--test_snr_end', type=float, default=0)
     parser.add_argument('--test_block_len', type=int, default=None)
 
     parser.add_argument('--noise_type', type=str, choices=['awgn', 'fading', 'radar', 't-dist', 'EPA', 'EVA', 'ETU', 'MIMO'], default='awgn')
@@ -159,15 +159,25 @@ if __name__ == '__main__':
         rx_llrs = np.array(rx_llrs)
         eng.quit()
     elif args.noise_type == 'MIMO':
+        print("Using ", args.noise_type, " channel")
         import matlab.engine
         eng = matlab.engine.start_matlab()
         s = eng.genpath('matlab_scripts')
         eng.addpath(s, nargout=0)
+        message_bits = torch.randint(0, 2, (args.test_batch_size, args.block_len), dtype=torch.float).to(device)
+        coded = turbo_encode(message_bits, trellis1, trellis2, interleaver, puncture = args.puncture).to(device)
+        coded_mat = matlab.double(coded.numpy().tolist())
+        code_len = int((args.block_len*3)+4*(trellis1.total_memory))
+        num_blocks = 179
+        SNRs = matlab.double(snr_range)
         num_tx = 1
         num_rx = 2
         max_num_tx = 2
         max_num_rx = 2
-        msgs, codewords, rx_llrs =  eng.generate_mimo_diversity_data (num_tx, num_rx, max_num_tx, max_num_rx, args.block_len, (args.block_len*3)+4*(trellis1.total_memory), snr_range, args.test_size)
+        num_codewords = int(args.test_size)
+        rx_llrs =  eng.generate_mimo_diversity_data (num_tx, num_rx, max_num_tx, max_num_rx, coded_mat, code_len, SNRs, num_codewords)
+        # convert to numpy
+        rx_llrs = np.array(rx_llrs)
         eng.quit()
 
     for ii in range(num_batches):
