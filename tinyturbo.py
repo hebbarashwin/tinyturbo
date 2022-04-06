@@ -45,102 +45,84 @@ class Turbo_subnet(nn.Module):
 
         return x
 
-def init_weights(block_len, num_iter, device = torch.device('cpu'), init_type = 'ones', type = 'normal'):
-    """
-    Initialize weights for TinyTurbo
-    Weight entanglement described in paper: 'scale'
+class TinyTurbo(nn.Module):
+    def __init__(self, block_len, num_iter, device = torch.device('cpu'), init_type = 'ones', type = 'normal'):
+        super(TinyTurbo, self).__init__()
 
-    Other settings are ablation studies.
-    """
-    weight_dict = {}
-    normal = {}
-    interleaved = {}
+        """
+        Initialize weights for TinyTurbo
+        Weight entanglement described in paper: 'scale'
 
-    assert type in ['normal', 'normal_common', 'same_all', 'same_iteration', 'scale', 'scale_common', 'same_scale_iteration', 'same_scale', 'one_weight']
+        Other settings are ablation studies.
+        """
+        self.normal = nn.ModuleList()
+        self.interleaved = nn.ModuleList()
 
-    if type == 'normal':
-        for ii in range(num_iter):
-            normal[ii] = Turbo_subnet(block_len, init_type).to(device)
-            interleaved[ii] = Turbo_subnet(block_len, init_type).to(device)
-        weight_dict['normal'] = normal
-        weight_dict['interleaved'] = interleaved
+        assert type in ['normal', 'normal_common', 'same_all', 'same_iteration', 'scale', 'scale_common', 'same_scale_iteration', 'same_scale', 'one_weight']
 
-    if type == 'normal_common':
-        for ii in range(num_iter):
-            net = Turbo_subnet(block_len, init_type).to(device)
-            normal[ii] = net
-            interleaved[ii] = net
-        weight_dict['normal'] = normal
-        weight_dict['interleaved'] = interleaved
+        if type == 'normal':
+            for ii in range(num_iter):
+                self.normal.append(Turbo_subnet(block_len, init_type))
+                self.interleaved.append(Turbo_subnet(block_len, init_type))
 
-    elif type == 'same_all':
-        net = Turbo_subnet(block_len, init_type).to(device)
-        for ii in range(num_iter):
-            normal[ii] = net
-            interleaved[ii] = net
-        weight_dict['normal'] = normal
-        weight_dict['interleaved'] = interleaved
+        if type == 'normal_common':
+            for ii in range(num_iter):
+                net = Turbo_subnet(block_len, init_type)
+                self.normal.append(net)
+                self.interleaved.append(net)
 
-    elif type == 'same_iteration':
-        normal_net = Turbo_subnet(block_len, init_type).to(device)
-        interleaved_net = Turbo_subnet(block_len, init_type).to(device)
+        elif type == 'same_all':
+            net = Turbo_subnet(block_len, init_type)
+            for ii in range(num_iter):
+                self.normal.append(net)
+                self.interleaved.append(net)
 
-        for ii in range(num_iter):
-            normal[ii] = normal_net
-            interleaved[ii] = interleaved_net
-        weight_dict['normal'] = normal
-        weight_dict['interleaved'] = interleaved
+        elif type == 'same_iteration':
+            normal_net = Turbo_subnet(block_len, init_type)
+            interleaved_net = Turbo_subnet(block_len, init_type)
 
-    elif type == 'scale':
-        for ii in range(num_iter):
-            normal[ii] = Turbo_subnet(1, init_type).to(device)
-            interleaved[ii] = Turbo_subnet(1, init_type).to(device)
-        weight_dict['normal'] = normal
-        weight_dict['interleaved'] = interleaved
+            for ii in range(num_iter):
+                self.normal.append(normal_net)
+                self.interleaved.append(interleaved_net)
 
-    elif type == 'scale_common':
-        for ii in range(num_iter):
-            net = Turbo_subnet(1, init_type).to(device)
-            normal[ii] = net
-            interleaved[ii] = net
-        weight_dict['normal'] = normal
-        weight_dict['interleaved'] = interleaved
+        elif type == 'scale':
+            for ii in range(num_iter):
+                self.normal.append(Turbo_subnet(1, init_type))
+                self.interleaved.append(Turbo_subnet(1, init_type))
 
-    elif type == 'same_scale':
-        net = Turbo_subnet(1, init_type).to(device)
-        for ii in range(num_iter):
-            normal[ii] = net
-            interleaved[ii] = net
-        weight_dict['normal'] = normal
-        weight_dict['interleaved'] = interleaved
+        elif type == 'scale_common':
+            for ii in range(num_iter):
+                net = Turbo_subnet(1, init_type)
+                self.normal.append(net)
+                self.interleaved.append(net)
 
-    elif type == 'same_scale_iteration':
-        net_normal = Turbo_subnet(1, init_type).to(device)
-        net_interleaved = Turbo_subnet(1, init_type).to(device)
-        for ii in range(num_iter):
-            normal[ii] = net_normal
-            interleaved[ii] = net_interleaved
-        weight_dict['normal'] = normal
-        weight_dict['interleaved'] = interleaved
+        elif type == 'same_scale':
+            net = Turbo_subnet(1, init_type)
+            for ii in range(num_iter):
+                self.normal.append(net)
+                self.interleaved.append(net)
 
-    elif type == 'one_weight':
-        net = Turbo_subnet(1, init_type, one_weight = True).to(device)
-        for ii in range(num_iter):
-            normal[ii] = net
-            interleaved[ii] = net
-        weight_dict['normal'] = normal
-        weight_dict['interleaved'] = interleaved
+        elif type == 'same_scale_iteration':
+            net_normal = Turbo_subnet(1, init_type)
+            net_interleaved = Turbo_subnet(1, init_type)
+            for ii in range(num_iter):
+                self.normal.append(net_normal)
+                self.interleaved.append(net_interleaved)
 
-    return weight_dict
+        elif type == 'one_weight':
+            net = Turbo_subnet(1, init_type, one_weight = True)
+            for ii in range(num_iter):
+                self.normal.append(net)
+                self.interleaved.append(net)
 
-def tinyturbo_decode(weight_dict, received_llrs, trellis, number_iterations, interleaver, L_int = None, method = 'max_log_MAP', puncture = False):
+def tinyturbo_decode(tinyturbo, received_llrs, trellis, number_iterations, interleaver, L_int = None, method = 'max_log_MAP', puncture = False):
 
     """ Turbo Decoder.
     Decode a Turbo code using TinyTurbo weights.
 
     Parameters
     ----------
-    weight_dict : Dictionary
+    tinyturbo : instance of decoder class
         Contains normal and interleaved weights for TinyTurbo
     received_llrs : LLRs of shape (batch_size, 3*M + 4*memory)
         Received LLRs corresponding to the received Turbo encoded bits
@@ -204,7 +186,7 @@ def tinyturbo_decode(weight_dict, received_llrs, trellis, number_iterations, int
         L_e_1 = L_ext_1[:, :sys_stream.shape[1]]
         L_1 = L_int_1[:, :sys_stream.shape[1]]
 
-        L_int_2 = weight_dict['normal'][iteration](L_e_1, sys_llr[:, :sys_stream.shape[1]], L_1)
+        L_int_2 = tinyturbo.normal[iteration](L_e_1, sys_llr[:, :sys_stream.shape[1]], L_1)
         L_int_2 = interleaver.interleave(L_int_2)
         L_int_2 = torch.cat((L_int_2, torch.zeros_like(term_sys1)), -1)
 
@@ -213,7 +195,7 @@ def tinyturbo_decode(weight_dict, received_llrs, trellis, number_iterations, int
         L_e_2 = interleaver.deinterleave(L_ext_2[:, :sys_stream.shape[1]])
         L_2 = interleaver.deinterleave(L_int_2[:, :sys_stream.shape[1]])
 
-        L_int_1 = weight_dict['interleaved'][iteration](L_e_2, sys_llr[:, :sys_stream.shape[1]], L_2)
+        L_int_1 = tinyturbo.interleaved[iteration](L_e_2, sys_llr[:, :sys_stream.shape[1]], L_2)
         L_int_1 = torch.cat((L_int_1, torch.zeros_like(term_sys1)), -1)
     LLRs = L_ext + L_int_1 + sys_llr
     decoded_bits = (LLRs > 0).float()
@@ -230,17 +212,12 @@ def train(args, trellis1, trellis2, interleaver, device, loaded_weights = None):
     IEEE Transactions on Communications, vol. 68, no. 10, pp. 6127–6140)
 
     """
-    if loaded_weights is None:
-        weight_dict = init_weights(args.block_len, args.tinyturbo_iters, device, args.init_type, args.decoding_type)
-    else:
-        weight_dict = loaded_weights
-        for ii in range(args.tinyturbo_iters):
-            weight_dict['normal'][ii].to(device)
-            weight_dict['interleaved'][ii].to(device)
-    params = []
-    for ii in range(args.tinyturbo_iters):
-        params += list(weight_dict['normal'][ii].parameters())
-        params += list(weight_dict['interleaved'][ii].parameters())
+    tinyturbo = TinyTurbo(args.block_len, args.tinyturbo_iters, device, args.init_type, args.decoding_type)
+    if loaded_weights is not None:
+        tinyturbo.load_state_dict(loaded_weights)
+    tinyturbo.to(device)
+
+    params = list(tinyturbo.parameters())
 
     criterion = nn.BCEWithLogitsLoss() if args.loss_type == 'BCE' else nn.MSELoss()
     optimizer = optim.Adam(params, lr = args.lr)
@@ -265,9 +242,9 @@ def train(args, trellis1, trellis2, interleaver, device, loaded_weights = None):
             received_llrs = 2*noisy_coded/noise_variance
 
             if args.input == 'y':
-                tinyturbo_llr, decoded_tt = tinyturbo_decode(weight_dict, noisy_coded, trellis1, args.tinyturbo_iters, interleaver, method = args.tt_bcjr, puncture = args.puncture)
+                tinyturbo_llr, decoded_tt = tinyturbo_decode(tinyturbo, noisy_coded, trellis1, args.tinyturbo_iters, interleaver, method = args.tt_bcjr, puncture = args.puncture)
             else:
-                tinyturbo_llr, decoded_tt = tinyturbo_decode(weight_dict, received_llrs, trellis1, args.tinyturbo_iters, interleaver, method = args.tt_bcjr, puncture = args.puncture)
+                tinyturbo_llr, decoded_tt = tinyturbo_decode(tinyturbo, received_llrs, trellis1, args.tinyturbo_iters, interleaver, method = args.tt_bcjr, puncture = args.puncture)
 
 
             if args.target == 'LLR':
@@ -293,8 +270,9 @@ def train(args, trellis1, trellis2, interleaver, device, loaded_weights = None):
                 print('Step : {}, Loss = {:.5f}, BER = {:.5f}, {:.2f} seconds, ID: {}'.format(step+1, loss, ber, time.time() - start, args.id))
 
             if (step+1)%args.save_every == 0 or step==0:
-                torch.save({'weights': weight_dict, 'args': args, 'steps': step+1, 'p_array':interleaver.p_array}, os.path.join(args.save_path, 'models/weights.pt'))
-                torch.save({'weights': weight_dict, 'args': args, 'steps': step+1, 'p_array':interleaver.p_array}, os.path.join(args.save_path, 'models/weights_{}.pt'.format(int(step+1))))
+                torch.save({'weights': tinyturbo.cpu().state_dict(), 'args': args, 'steps': step+1, 'p_array':interleaver.p_array}, os.path.join(args.save_path, 'models/weights.pt'))
+                torch.save({'weights': tinyturbo.cpu().state_dict(), 'args': args, 'steps': step+1, 'p_array':interleaver.p_array}, os.path.join(args.save_path, 'models/weights_{}.pt'.format(int(step+1))))
+                tinyturbo.to(device)
             if (step+1)%10 == 0:
                 plt.figure()
                 plt.plot(training_losses)
@@ -331,13 +309,15 @@ def train(args, trellis1, trellis2, interleaver, device, loaded_weights = None):
                     write.writerow(training_losses)
                     write.writerow(training_bers)
 
-        return weight_dict, training_losses, training_bers, step+1
+        return tinyturbo, training_losses, training_bers, step+1
 
     except KeyboardInterrupt:
         print("Exited")
 
-        torch.save({'weights': weight_dict, 'args': args, 'steps': step+1, 'p_array':interleaver.p_array}, os.path.join(args.save_path, 'models/weights.pt'))
-        torch.save({'weights': weight_dict, 'args': args, 'steps': step+1, 'p_array':interleaver.p_array}, os.path.join(args.save_path, 'models/weights_{}.pt'.format(int(step+1))))
+        torch.save({'weights': tinyturbo.cpu().state_dict(), 'args': args, 'steps': step+1, 'p_array':interleaver.p_array}, os.path.join(args.save_path, 'models/weights.pt'))
+        torch.save({'weights': tinyturbo.cpu().state_dict(), 'args': args, 'steps': step+1, 'p_array':interleaver.p_array}, os.path.join(args.save_path, 'models/weights_{}.pt'.format(int(step+1))))
+        tinyturbo.to(device)
+
         with open(os.path.join(args.save_path, 'values_training.csv'), 'w') as f:
 
              # using csv.writer method from CSV package
@@ -346,9 +326,9 @@ def train(args, trellis1, trellis2, interleaver, device, loaded_weights = None):
              write.writerow(training_losses)
              write.writerow(training_bers)
 
-        return weight_dict, training_losses, training_bers, step+1
+        return tinyturbo, training_losses, training_bers, step+1
 
-def test(args, weight_d, trellis1, trellis2, interleaver, device, only_tt = False):
+def test(args, tinyturbo, trellis1, trellis2, interleaver, device, only_tt = False):
     """
     Test function
     """
@@ -404,10 +384,10 @@ def test(args, weight_d, trellis1, trellis2, interleaver, device, only_tt = Fals
                 code_len = int((args.block_len*3)+4*(trellis1.total_memory))
                 num_blocks = 179
                 SNRs = matlab.double(snr_range)
-                num_tx = 1
-                num_rx = 2
-                max_num_tx = 2
-                max_num_rx = 2
+                num_tx = args.num_tx
+                num_rx = args.num_rx
+                max_num_tx = args.max_num_tx
+                max_num_rx = args.max_num_rx
                 num_codewords = int(args.test_size)
                 rx_llrs =  eng.generate_mimo_diversity_data (num_tx, num_rx, max_num_tx, max_num_rx, coded_mat, code_len, SNRs, num_codewords)
                 # convert to numpy
@@ -453,9 +433,9 @@ def test(args, weight_d, trellis1, trellis2, interleaver, device, only_tt = Fals
 
             # tinyturbo decode
             if args.input == 'y':
-                tt_llrs, decoded_tt = tinyturbo_decode(weight_d, noisy_coded, trellis1, args.tinyturbo_iters, interleaver, method = args.tt_bcjr, puncture = args.puncture)
+                tt_llrs, decoded_tt = tinyturbo_decode(tinyturbo, noisy_coded, trellis1, args.tinyturbo_iters, interleaver, method = args.tt_bcjr, puncture = args.puncture)
             else:
-                tt_llrs, decoded_tt = tinyturbo_decode(weight_d, received_llrs, trellis1, args.tinyturbo_iters, interleaver, method = args.tt_bcjr, puncture = args.puncture)
+                tt_llrs, decoded_tt = tinyturbo_decode(tinyturbo, received_llrs, trellis1, args.tinyturbo_iters, interleaver, method = args.tt_bcjr, puncture = args.puncture)
 
             ber_tinyturbo = errors_ber(message_bits, decoded_tt[:, :-trellis1.total_memory])
             bler_tinyturbo = errors_bler(message_bits, decoded_tt[:, :-trellis1.total_memory])

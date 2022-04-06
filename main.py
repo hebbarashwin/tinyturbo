@@ -12,7 +12,7 @@ import pickle
 
 from convcode import Trellis
 from interleaver import Interleaver
-from tinyturbo import train, test
+from tinyturbo import train, test, TinyTurbo
 from utils import moving_average
 
 def get_args():
@@ -22,8 +22,7 @@ def get_args():
     parser.add_argument('--block_len', type=int, default=40)
     parser.add_argument('--batch_size', type=int, default=1000)
     parser.add_argument('--turbo_iters', type=int, default=6)
-    parser.add_argument('--bcjr_method', type=str, choices=['MAP', 'max_log_MAP'], default='MAP')
-    parser.add_argument('--decoding_type', type=str, choices=['normal', 'normal_common', 'same_all', 'same_iteration', 'scale', 'scale_common', 'same_scale', 'same_scale_iteration', 'one_weight'], default='normal')
+    parser.add_argument('--decoding_type', type=str, choices=['normal', 'normal_common', 'same_all', 'same_iteration', 'scale', 'scale_common', 'same_scale', 'same_scale_iteration', 'one_weight'], default='scale')
     parser.add_argument('--interleaver', type=str, choices=['random', 'qpp', 'rectangular'], default='qpp')
     parser.add_argument('--puncture', dest = 'puncture', default=False, action='store_true', help='Puncture to get rate 1/2')
     parser.add_argument('--code', type=str, choices=['lte', '757'], default='lte', help = 'Turbo code to use')
@@ -36,14 +35,14 @@ def get_args():
     parser.add_argument('--tt_bcjr', type=str, choices=['MAP', 'max_log_MAP'], default='max_log_MAP')
     parser.add_argument('--train_snr', type=float, default=-1)
 
-    parser.add_argument('--input', type=str, choices=['y', 'llr'], default='llr', help = 'Train loss')
+    parser.add_argument('--input', type=str, choices=['y', 'llr'], default='llr', help = 'Input to tinyturbo: y or LLR?')
     parser.add_argument('--loss_type', type=str, choices=['BCE', 'MSE'], default='BCE', help = 'Train loss')
     parser.add_argument('--lr', type=float, default=0.0008)
     parser.add_argument('--save_every', type=int, default=100)
 
     # Testing
-    parser.add_argument('--test_size', type=int, default=100000)
-    parser.add_argument('--test_batch_size', type=int, default=100000)
+    parser.add_argument('--test_size', type=int, default=10000)
+    parser.add_argument('--test_batch_size', type=int, default=10000)
     parser.add_argument('--snr_points', type=int, default=8)
     parser.add_argument('--test_snr_start', type=float, default=-1.5)
     parser.add_argument('--test_snr_end', type=float, default=2)
@@ -155,10 +154,10 @@ if __name__ == '__main__':
             except:
                 print("Model not found at {}".format(args.load_model_train))
 
-        weight_d, training_losses, training_bers, steps = train(args, trellis1, trellis2, interleaver, device, loaded_weights)
+        tinyturbo, training_losses, training_bers, steps = train(args, trellis1, trellis2, interleaver, device, loaded_weights)
 
-        torch.save({'weights': weight_d, 'args': args, 'steps': steps, 'p_array':interleaver.p_array}, os.path.join(args.save_path, 'models/weights.pt'))
-        torch.save({'weights': weight_d, 'args': args, 'steps': steps, 'p_array':interleaver.p_array}, os.path.join(args.save_path, 'models/weights_{}.pt'.format(int(steps))))
+        torch.save({'weights': tinyturbo.cpu().state_dict(), 'args': args, 'steps': steps, 'p_array':interleaver.p_array}, os.path.join(args.save_path, 'models/weights.pt'))
+        torch.save({'weights': tinyturbo.cpu().state_dict(), 'args': args, 'steps': steps, 'p_array':interleaver.p_array}, os.path.join(args.save_path, 'models/weights_{}.pt'.format(int(steps))))
         plt.figure()
         plt.plot(training_losses)
         plt.plot(moving_average(training_losses, n=10))
@@ -191,10 +190,7 @@ if __name__ == '__main__':
     else:
         checkpoint = torch.load(os.path.join(args.save_path, 'models/weights.pt'), map_location=device)
     trained_args = checkpoint['args']
-    weight_d = checkpoint['weights']
-    for ii in range(args.tinyturbo_iters):
-        weight_d['normal'][ii].to(device)
-        weight_d['interleaved'][ii].to(device)
+    weights = checkpoint['weights']
 
     if args.test:
         print("Loaded model at step {}".format(checkpoint['steps']))
@@ -223,11 +219,16 @@ if __name__ == '__main__':
         else:
             print("QPP not yet supported for block length {}".format(args.block_len))
         print('Testing block_len = {}'.format(args.test_block_len))
-
-    if args.only_tt:
-        snr_range, bers_ml, bers_l, bers_tt, blers_ml, blers_l, blers_tt = test(args, weight_d, trellis1, trellis2, interleaver, device, only_tt = True)
     else:
-        snr_range, bers_ml, bers_l, bers_tt, blers_ml, blers_l, blers_tt = test(args, weight_d, trellis1, trellis2, interleaver, device, only_tt = False)
+        args.test_block_len = args.block_len
+
+    tinyturbo = TinyTurbo(args.test_block_len, args.tinyturbo_iters, device, args.init_type, args.decoding_type)
+    tinyturbo.load_state_dict(weights)
+    tinyturbo.to(device)
+    if args.only_tt:
+        snr_range, bers_ml, bers_l, bers_tt, blers_ml, blers_l, blers_tt = test(args, tinyturbo, trellis1, trellis2, interleaver, device, only_tt = True)
+    else:
+        snr_range, bers_ml, bers_l, bers_tt, blers_ml, blers_l, blers_tt = test(args, tinyturbo, trellis1, trellis2, interleaver, device, only_tt = False)
         snr_range_saved = snr_range
     print('SNRs = {}'.format(snr_range))
     print("BERs : \n Max-Log-MAP : {}, \n MAP = {}, \n TinyTurbo = {}\n".format(bers_ml, bers_l, bers_tt))
