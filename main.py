@@ -49,9 +49,18 @@ def get_args():
     parser.add_argument('--test_block_len', type=int, default=None)
 
     parser.add_argument('--noise_type', type=str, choices=['awgn', 'fading', 'radar', 't-dist', 'EPA', 'EVA', 'ETU', 'MIMO'], default='awgn')
+
+    # radar (bursty) channel parameters
     parser.add_argument('--vv',type=float, default=5, help ='only for t distribution channel : degrees of freedom')
     parser.add_argument('--radar_prob',type=float, default=0.01, help ='only for radar distribution channel')
     parser.add_argument('--radar_power',type=float, default=5.0, help ='only for radar distribution channel')
+
+    # MIMO channel parameters
+    parser.add_argument('--num_tx', type=int, default=1)
+    parser.add_argument('--num_rx', type=int, default=2)
+    parser.add_argument('--max_num_tx', type=int, default=2)
+    parser.add_argument('--max_num_rx', type=int, default=2)
+
 
     parser.add_argument('--gpu', type=int, default=0) #-1 for cpu
     parser.add_argument('--seed', type=int, default=19)
@@ -156,6 +165,7 @@ if __name__ == '__main__':
 
         tinyturbo, training_losses, training_bers, steps = train(args, trellis1, trellis2, interleaver, device, loaded_weights)
 
+        # Save weights after training
         torch.save({'weights': tinyturbo.cpu().state_dict(), 'args': args, 'steps': steps, 'p_array':interleaver.p_array}, os.path.join(args.save_path, 'models/weights.pt'))
         torch.save({'weights': tinyturbo.cpu().state_dict(), 'args': args, 'steps': steps, 'p_array':interleaver.p_array}, os.path.join(args.save_path, 'models/weights_{}.pt'.format(int(steps))))
         plt.figure()
@@ -196,6 +206,7 @@ if __name__ == '__main__':
         print("Loaded model at step {}".format(checkpoint['steps']))
         interleaver.set_p_array(checkpoint['p_array'])
 
+    # If decoding type = 'scale', i.e., TINYTURBO, can test on different block length than trained block length
     if args.test_block_len is not None:
         args.block_len = args.test_block_len
         if args.block_len == 40:

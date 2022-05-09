@@ -197,7 +197,9 @@ def tinyturbo_decode(tinyturbo, received_llrs, trellis, number_iterations, inter
 
         L_int_1 = tinyturbo.interleaved[iteration](L_e_2, sys_llr[:, :sys_stream.shape[1]], L_2)
         L_int_1 = torch.cat((L_int_1, torch.zeros_like(term_sys1)), -1)
-    LLRs = L_ext + L_int_1 + sys_llr
+
+    LLRs = torch.cat((L_2, torch.zeros_like(term_sys2)), -1) + L_int_1 + sys_llr
+
     decoded_bits = (LLRs > 0).float()
 
     return LLRs, decoded_bits
@@ -348,103 +350,103 @@ def test(args, tinyturbo, trellis1, trellis2, interleaver, device, only_tt = Fal
     bers_tt = []
     blers_tt = []
     print("TESTING")
-
-    for ii in range(num_batches):
-        if args.noise_type in ['awgn', 'fading', 't-dist', 'radar']:
-            message_bits = torch.randint(0, 2, (args.test_batch_size, args.block_len), dtype=torch.float).to(device)
-            coded = turbo_encode(message_bits, trellis1, trellis2, interleaver, puncture = args.puncture).to(device)
-        else:
-            if  args.noise_type in ['EPA', 'EVA', 'ETU']: #run from MATLAB
-                print("Using ", args.noise_type, " channel")
-                import matlab.engine
-                eng = matlab.engine.start_matlab()
-                s = eng.genpath('matlab_scripts')
-                eng.addpath(s, nargout=0)
-                message_bits = torch.randint(0, 2, (args.test_batch_size, args.block_len), dtype=torch.float).to(device)
-                coded = turbo_encode(message_bits, trellis1, trellis2, interleaver, puncture = args.puncture).to(device)
-                coded_mat = matlab.double(coded.numpy().tolist())
-                # calculate closest multiple to num_sym(179)
-                num_sym = int(np.floor(coded.size(0)/179)) + 1
-                code_len = int((args.block_len*3)+4*(trellis1.total_memory))
-                num_blocks = 179
-                SNRs = matlab.double(snr_range)
-                rx_llrs = eng.generate_lte_data(coded_mat, code_len, args.noise_type, SNRs, num_blocks, num_sym)
-                # convert to numpy
-                rx_llrs = np.array(rx_llrs)
-                eng.quit()
-            elif args.noise_type == 'MIMO':
-                print("Using ", args.noise_type, " channel")
-                import matlab.engine
-                eng = matlab.engine.start_matlab()
-                s = eng.genpath('matlab_scripts')
-                eng.addpath(s, nargout=0)
-                message_bits = torch.randint(0, 2, (args.test_batch_size, args.block_len), dtype=torch.float).to(device)
-                coded = turbo_encode(message_bits, trellis1, trellis2, interleaver, puncture = args.puncture).to(device)
-                coded_mat = matlab.double(coded.numpy().tolist())
-                code_len = int((args.block_len*3)+4*(trellis1.total_memory))
-                num_blocks = 179
-                SNRs = matlab.double(snr_range)
-                num_tx = args.num_tx
-                num_rx = args.num_rx
-                max_num_tx = args.max_num_tx
-                max_num_rx = args.max_num_rx
-                num_codewords = int(args.test_size)
-                rx_llrs =  eng.generate_mimo_diversity_data (num_tx, num_rx, max_num_tx, max_num_rx, coded_mat, code_len, SNRs, num_codewords)
-                # convert to numpy
-                rx_llrs = np.array(rx_llrs)
-                eng.quit()
-        for k, snr in tqdm(enumerate(snr_range)):
-            sigma = snr_db2sigma(snr)
-            noise_variance = sigma**2
-
+    with torch.no_grad():
+        for ii in range(num_batches):
             if args.noise_type in ['awgn', 'fading', 't-dist', 'radar']:
-                noisy_coded = corrupt_signal(coded, sigma, noise_type, vv = args.vv, radar_power = args.radar_power, radar_prob = args.radar_prob)
-                received_llrs = 2*noisy_coded/noise_variance
+                message_bits = torch.randint(0, 2, (args.test_batch_size, args.block_len), dtype=torch.float).to(device)
+                coded = turbo_encode(message_bits, trellis1, trellis2, interleaver, puncture = args.puncture).to(device)
+            else:
+                if  args.noise_type in ['EPA', 'EVA', 'ETU']: #run from MATLAB
+                    print("Using ", args.noise_type, " channel")
+                    import matlab.engine
+                    eng = matlab.engine.start_matlab()
+                    s = eng.genpath('matlab_scripts')
+                    eng.addpath(s, nargout=0)
+                    message_bits = torch.randint(0, 2, (args.test_batch_size, args.block_len), dtype=torch.float).to(device)
+                    coded = turbo_encode(message_bits, trellis1, trellis2, interleaver, puncture = args.puncture).to(device)
+                    coded_mat = matlab.double(coded.numpy().tolist())
+                    # calculate closest multiple to num_sym(179)
+                    num_sym = int(np.floor(coded.size(0)/179)) + 1
+                    code_len = int((args.block_len*3)+4*(trellis1.total_memory))
+                    num_blocks = 179
+                    SNRs = matlab.double(snr_range)
+                    rx_llrs = eng.generate_lte_data(coded_mat, code_len, args.noise_type, SNRs, num_blocks, num_sym)
+                    # convert to numpy
+                    rx_llrs = np.array(rx_llrs)
+                    eng.quit()
+                elif args.noise_type == 'MIMO':
+                    print("Using ", args.noise_type, " channel")
+                    import matlab.engine
+                    eng = matlab.engine.start_matlab()
+                    s = eng.genpath('matlab_scripts')
+                    eng.addpath(s, nargout=0)
+                    message_bits = torch.randint(0, 2, (args.test_batch_size, args.block_len), dtype=torch.float).to(device)
+                    coded = turbo_encode(message_bits, trellis1, trellis2, interleaver, puncture = args.puncture).to(device)
+                    coded_mat = matlab.double(coded.numpy().tolist())
+                    code_len = int((args.block_len*3)+4*(trellis1.total_memory))
+                    num_blocks = 179
+                    SNRs = matlab.double(snr_range)
+                    num_tx = args.num_tx
+                    num_rx = args.num_rx
+                    max_num_tx = args.max_num_tx
+                    max_num_rx = args.max_num_rx
+                    num_codewords = int(args.test_size)
+                    rx_llrs =  eng.generate_mimo_diversity_data (num_tx, num_rx, max_num_tx, max_num_rx, coded_mat, code_len, SNRs, num_codewords)
+                    # convert to numpy
+                    rx_llrs = np.array(rx_llrs)
+                    eng.quit()
+            for k, snr in tqdm(enumerate(snr_range)):
+                sigma = snr_db2sigma(snr)
+                noise_variance = sigma**2
 
-            elif noise_type in ['EPA', 'EVA', 'ETU', 'MIMO']:
-                # converting numpy to torch here
-                received_llrs = torch.from_numpy(np.transpose(rx_llrs[:, :, k])).to(device)
+                if args.noise_type in ['awgn', 'fading', 't-dist', 'radar']:
+                    noisy_coded = corrupt_signal(coded, sigma, noise_type, vv = args.vv, radar_power = args.radar_power, radar_prob = args.radar_prob)
+                    received_llrs = 2*noisy_coded/noise_variance
 
-            if not only_tt:
-                # Turbo decode
-                ml_llrs, decoded_ml = turbo_decode(received_llrs, trellis1, args.tinyturbo_iters,
-                                             interleaver, method='max_log_MAP', puncture = args.puncture)
-                ber_maxlog = errors_ber(message_bits, decoded_ml[:, :-trellis1.total_memory])
-                bler_maxlog = errors_bler(message_bits, decoded_ml[:, :-trellis1.total_memory])
+                elif noise_type in ['EPA', 'EVA', 'ETU', 'MIMO']:
+                    # converting numpy to torch here
+                    received_llrs = torch.from_numpy(np.transpose(rx_llrs[:, :, k])).to(device)
+
+                if not only_tt:
+                    # Turbo decode
+                    ml_llrs, decoded_ml = turbo_decode(received_llrs, trellis1, args.tinyturbo_iters,
+                                                 interleaver, method='max_log_MAP', puncture = args.puncture)
+                    ber_maxlog = errors_ber(message_bits, decoded_ml[:, :-trellis1.total_memory])
+                    bler_maxlog = errors_bler(message_bits, decoded_ml[:, :-trellis1.total_memory])
+
+                    if ii == 0:
+                        bers_ml.append(ber_maxlog/num_batches)
+                        blers_ml.append(bler_maxlog/num_batches)
+                    else:
+                        bers_ml[k] += ber_maxlog/num_batches
+                        blers_ml[k] += bler_maxlog/num_batches
+
+                    l_llrs, decoded_l = turbo_decode(received_llrs, trellis1, args.turbo_iters,
+                                                interleaver, method='log_MAP', puncture = args.puncture)
+                    ber_log = errors_ber(message_bits, decoded_l[:, :-trellis1.total_memory])
+                    bler_log = errors_bler(message_bits, decoded_l[:, :-trellis1.total_memory])
+
+                    if ii == 0:
+                        bers_l.append(ber_log/num_batches)
+                        blers_l.append(bler_log/num_batches)
+                    else:
+                        bers_l[k] += ber_log/num_batches
+                        blers_l[k] += bler_log/num_batches
+
+                # tinyturbo decode
+                if args.input == 'y':
+                    tt_llrs, decoded_tt = tinyturbo_decode(tinyturbo, noisy_coded, trellis1, args.tinyturbo_iters, interleaver, method = args.tt_bcjr, puncture = args.puncture)
+                else:
+                    tt_llrs, decoded_tt = tinyturbo_decode(tinyturbo, received_llrs, trellis1, args.tinyturbo_iters, interleaver, method = args.tt_bcjr, puncture = args.puncture)
+
+                ber_tinyturbo = errors_ber(message_bits, decoded_tt[:, :-trellis1.total_memory])
+                bler_tinyturbo = errors_bler(message_bits, decoded_tt[:, :-trellis1.total_memory])
 
                 if ii == 0:
-                    bers_ml.append(ber_maxlog/num_batches)
-                    blers_ml.append(bler_maxlog/num_batches)
+                    bers_tt.append(ber_tinyturbo/num_batches)
+                    blers_tt.append(bler_tinyturbo/num_batches)
                 else:
-                    bers_ml[k] += ber_maxlog/num_batches
-                    blers_ml[k] += bler_maxlog/num_batches
-
-                l_llrs, decoded_l = turbo_decode(received_llrs, trellis1, args.turbo_iters,
-                                            interleaver, method='log_MAP', puncture = args.puncture)
-                ber_log = errors_ber(message_bits, decoded_l[:, :-trellis1.total_memory])
-                bler_log = errors_bler(message_bits, decoded_l[:, :-trellis1.total_memory])
-
-                if ii == 0:
-                    bers_l.append(ber_log/num_batches)
-                    blers_l.append(bler_log/num_batches)
-                else:
-                    bers_l[k] += ber_log/num_batches
-                    blers_l[k] += bler_log/num_batches
-
-            # tinyturbo decode
-            if args.input == 'y':
-                tt_llrs, decoded_tt = tinyturbo_decode(tinyturbo, noisy_coded, trellis1, args.tinyturbo_iters, interleaver, method = args.tt_bcjr, puncture = args.puncture)
-            else:
-                tt_llrs, decoded_tt = tinyturbo_decode(tinyturbo, received_llrs, trellis1, args.tinyturbo_iters, interleaver, method = args.tt_bcjr, puncture = args.puncture)
-
-            ber_tinyturbo = errors_ber(message_bits, decoded_tt[:, :-trellis1.total_memory])
-            bler_tinyturbo = errors_bler(message_bits, decoded_tt[:, :-trellis1.total_memory])
-
-            if ii == 0:
-                bers_tt.append(ber_tinyturbo/num_batches)
-                blers_tt.append(bler_tinyturbo/num_batches)
-            else:
-                bers_tt[k] += ber_tinyturbo/num_batches
-                blers_tt[k] += bler_tinyturbo/num_batches
+                    bers_tt[k] += ber_tinyturbo/num_batches
+                    blers_tt[k] += bler_tinyturbo/num_batches
 
     return snr_range, bers_ml, bers_l, bers_tt, blers_ml, blers_l, blers_tt
